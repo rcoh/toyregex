@@ -1,0 +1,11 @@
+digraph {
+	rankdir=LR 
+	{
+		-1 [shape=doublecircle][label=""]
+	}
+	node[label=""] 6 -> 5 [label=a]
+	node[label=""] 5 -> 4 [label=b]
+	node[label=""] 4 -> 3 
+	node[label=""] 4 -> -1 
+	node[label=""] 3 -> 4 [label=c] 
+}

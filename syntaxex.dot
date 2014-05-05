@@ -1,0 +1,9 @@
+graph {
+	concatRoot [label=Concat]
+	plus [label=Plus]
+	lita [label=Lit]
+	litb [label=Lit]
+	concatRoot -- lita -- a
+	concatRoot -- plus
+	plus -- litb -- b
+}
