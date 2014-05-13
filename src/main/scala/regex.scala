@@ -1,12 +1,5 @@
 import scala.util.parsing.combinator._
 import collection.mutable
-object App {
-  def main(args: Array[String]) = {
-  	val nfa = NFA.regexToNFA(RegexParser("abc*").get)
-  	println(GraphVizGenerator.toGraphViz(nfa))
-  	
-  }
-}
 
 abstract class RegexExpr
 case class Literal(c: Char) extends RegexExpr
@@ -45,40 +38,12 @@ object RegexParser extends RegexParsers {
 	}
 }
 
-object State {
-	var nextId = 0
-	// Provide unique Ids to the states
-	def getId = {
-		nextId += 1
-		nextId
-	}
-}
+abstract class State
 
-abstract class State {
-	val id = State.getId
-	override def toString: String = {
-		this match {
-			case Consume(c, _) => c.toString
-			case s: Split => "split"
-			case Match() => "match"
-		}
-	}	
-
-	override def equals(obj: Any) = obj match {
-		case s: State => s.id == id
-		case _ => false
-	}
-
-	override def hashCode = id
-}
-case class Consume(c: Char, var out: State) extends State
-case class Split(out1: State, out2: State) extends State
-case class Match() extends State {
-	// Ensure all matches are always equal
-	override val id = -1
-}
-
-case class WaitingToBeBound() extends State
+class Consume(val c: Char, var out: State) extends State
+class Split(var out1: State, var out2: State) extends State
+class WaitingToBeBound() extends State
+case class Match() extends State
 
 // consume from tree, append
 object NFA {
@@ -86,65 +51,87 @@ object NFA {
 	
 	private def regexToNFA(regex: RegexExpr, andThen: State): State = {
 		regex match {
-			case Literal(c) => Consume(c, andThen)
+			case Literal(c) => new Consume(c, andThen)
 			case Concat(first, second) => {
 				regexToNFA(first, regexToNFA(second, andThen))
 			}
-			case Or(l, r) => Split(
+			case Or(l, r) => new Split(
 				regexToNFA(l, andThen), 
 				regexToNFA(r, andThen)
 			)
 
 			case Repeat(r) => 
-				val split = Split(
+				val placeholder = new WaitingToBeBound()
+				val split = new Split(
 					// One path goes to andThen, the other path goes back to r
-					regexToNFA(r, WaitingToBeBound()),
+					regexToNFA(r, placeholder),
 					andThen
 				)
-				bindUnboundOutputs(split, split)
+				bindUnboundOutputs(split, split, target = placeholder)
 				split
 
 			case Plus(r) =>
-				val split = Split(
+				val placeholder = new WaitingToBeBound()
+				val split = new Split(
 					regexToNFA(r, andThen),
-					regexToNFA(r, WaitingToBeBound())
+					regexToNFA(r, placeholder)
 				)
-				bindUnboundOutputs(split, split)
+				bindUnboundOutputs(split, split, target = placeholder)
 				split
 		}
 	}
 
-	private def bindUnboundOutputs(input: State, to: State, visited: mutable.Set[State] = mutable.Set[State]()): Unit = {
+	private def bindUnboundOutputs(input: State, to: State, visited: mutable.Set[State] = mutable.Set[State](), target: State): Unit = {
 		if (!(visited contains input)) {
 			visited.add(input)
 			input match {
-				case c @ Consume(_, WaitingToBeBound()) => c.out = to
-				case c: Consume => bindUnboundOutputs(c.out, to, visited)
-				case Split(out1, out2) => 
-					bindUnboundOutputs(out1, to, visited)
-					bindUnboundOutputs(out2, to, visited)
-				case Match() => 
+				case c: Consume => c.out match {
+					case w: WaitingToBeBound if w == target => c.out = to
+					case _ => bindUnboundOutputs(c.out, to, visited, target)
+				}
+				case s: Split => {
+					s.out1 match {
+						case w: WaitingToBeBound if w == target => s.out1 = to
+						case _ => bindUnboundOutputs(s.out1, to, visited, target)
+					}
+					s.out2 match {
+						case w: WaitingToBeBound if w == target => s.out2 = to
+						case _ => bindUnboundOutputs(s.out2, to, visited, target)
+					}
+				}
+	
+				case _: Match =>
+				case _: WaitingToBeBound =>
 			}
 		}
 	}
 }
 
 object NFAEvaluator {
-	def evaluate(nfa: State, input: String): Boolean = evaluate(List(nfa), input)
+	def evaluate(nfa: State, input: String): Boolean = evaluate(Set(nfa), input)
 
-	def evaluate(nfas: List[State], input: String): Boolean = {
-		println(f"evaluating: $nfas")
+	def evaluate(nfas: Set[State], input: String): Boolean = {
 		input match {
-			case "" => nfas.flatMap(nfa => evaluate(nfa, None)).exists(_ == Match())
-			case s => evaluate(nfas.flatMap(nfa => evaluate(nfa, s.headOption)), s.tail)
+			case "" => evaluateStates(nfas, None).exists(_ == Match())
+			case string => evaluate(evaluateStates(nfas, input.headOption), string.tail)
 		}
 	}
 
-	def evaluate(nfa: State, input: Option[Char]): List[State] = {
-		nfa match {
-			case Consume(c, next) => if (Some(c) == input || c == '.') List(next) else Nil
-			case Split(out1, out2) => evaluate(out1, input) ++ evaluate(out2, input)
-			case Match() => if (input.isDefined) Nil else List(Match())
+	def evaluateStates(nfas: Set[State], input: Option[Char]): Set[State] = {
+		val visitedStates = mutable.Set[State]()
+		nfas.flatMap(state => evaluateState(state, input, visitedStates))
+	}
+
+	def evaluateState(currentState: State, input: Option[Char], visitedStates: mutable.Set[State]): Set[State] = {
+		if (visitedStates contains currentState) {
+			Set()
+		} else {
+			visitedStates.add(currentState)
+			currentState match {
+				case consume: Consume => if (Some(consume.c) == input || consume.c == '.') Set(consume.out) else Set()
+				case s: Split => evaluateState(s.out1, input, visitedStates) ++ evaluateState(s.out2, input, visitedStates)
+				case m: Match => if (input.isDefined) Set() else Set(Match())
+			}
 		}
 	}
 }

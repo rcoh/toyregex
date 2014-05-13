@@ -1,0 +1,14 @@
+digraph { 
+			{
+				-1 [shape=doublecircle][label=""]
+			}
+			node[label=""] 611247732 -> 1826348123 
+node[label=""] 611247732 -> -1 
+node[label=""] 1826348123 -> 535942888 
+node[label=""] 1826348123 -> 1449136690 
+node[label=""] 535942888 -> 1045703098 
+node[label=""] 535942888 -> 1214137018 
+node[label=""] 1045703098 -> 611247732 [label=a]
+node[label=""] 1214137018 -> 535942888 [label=a]
+node[label=""] 1449136690 -> 611247732 [label=b] 
+		}
