@@ -24,7 +24,17 @@ class ExampleSpec extends WordSpec with Matchers {
 
     "match more complex regexes" in {
       Regex.fullMatch("a", "(a*)*") should be (true)
-      Regex.fullMatch("b", "(a*)*") should be (false)    
+      Regex.fullMatch("b", "(a*)*") should be (false)  
+      Regex.fullMatch("abc", "abc") should be (true) 
+   
+      Regex.fullMatch("abc", "(a|b)bc") should be (true)  
+      Regex.fullMatch("abc", "(a|b)+bc") should be (true)  
+      Regex.fullMatch("abc", "(a|b)+b*c") should be (true)  
+      Regex.fullMatch("abc", "((a|b)+b*c)+") should be (true)  
+    }
+
+    "match this pattern a million times" in {
+      (1 to 10000).foreach(_ => full("abcabcabcabcabcabcabcd", "((a|b)+b*c)+"))
     }
 
     def full(input: String, pattern: String) = Regex.fullMatch(input, pattern)

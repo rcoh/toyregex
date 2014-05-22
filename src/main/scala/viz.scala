@@ -20,6 +20,7 @@ object GraphVizGenerator {
 		val edges = toEdgeList(input).map(_.toDot).mkString("\n")
 		f"""digraph { 
 			{
+				 0 [label="START"]
 				-1 [shape=doublecircle][label=""]
 				-2 [label="WAIT"]
 			}
@@ -29,7 +30,7 @@ object GraphVizGenerator {
 
 	def getId(s: State) = s match {
 		case m: Match => -1
-		case w: WaitingToBeBound => -2
+		//case w: WaitingToBeBound => -2
 		case _ => s.hashCode
 	}
 
@@ -44,7 +45,7 @@ object GraphVizGenerator {
 				case split: Split => Edge(getId(split), getId(split.out1)) :: 
 					Edge(getId(split), getId(split.out2)) :: (toEdgeList(split.out1, visited) ++ toEdgeList(split.out2, visited))
 				case m: Match => Nil
-				case w: WaitingToBeBound => Nil
+				case p: Placeholder => Edge(getId(p), getId(p.pointingTo)) :: toEdgeList(p.pointingTo, visited)
 			}
 		}		
 	}

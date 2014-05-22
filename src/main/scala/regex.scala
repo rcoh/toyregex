@@ -40,12 +40,11 @@ object RegexParser extends RegexParsers {
 
 abstract class State
 
-class Consume(val c: Char, var out: State) extends State
-class Split(var out1: State, var out2: State) extends State
-class WaitingToBeBound() extends State
+class Consume(val c: Char, val out: State) extends State
+class Split(val out1: State, val out2: State) extends State
+class Placeholder(var pointingTo: State) extends State
 case class Match() extends State
 
-// consume from tree, append
 object NFA {
 	def regexToNFA(regex: RegexExpr): State = regexToNFA(regex, Match())
 	
@@ -61,48 +60,17 @@ object NFA {
 			)
 
 			case Repeat(r) => 
-				val placeholder = new WaitingToBeBound()
+				val placeholder = new Placeholder(null)
 				val split = new Split(
-					// One path goes to andThen, the other path goes back to r
+					// One path pointing back to the placeholder (the input element of our state machine)
 					regexToNFA(r, placeholder),
+					// One path for the 0 repeat case direct to andThen
 					andThen
 				)
-				bindUnboundOutputs(split, split, target = placeholder)
-				split
+				placeholder.pointingTo = split
+				placeholder
 
-			case Plus(r) =>
-				val placeholder = new WaitingToBeBound()
-				val split = new Split(
-					regexToNFA(r, andThen),
-					regexToNFA(r, placeholder)
-				)
-				bindUnboundOutputs(split, split, target = placeholder)
-				split
-		}
-	}
-
-	private def bindUnboundOutputs(input: State, to: State, visited: mutable.Set[State] = mutable.Set[State](), target: State): Unit = {
-		if (!(visited contains input)) {
-			visited.add(input)
-			input match {
-				case c: Consume => c.out match {
-					case w: WaitingToBeBound if w == target => c.out = to
-					case _ => bindUnboundOutputs(c.out, to, visited, target)
-				}
-				case s: Split => {
-					s.out1 match {
-						case w: WaitingToBeBound if w == target => s.out1 = to
-						case _ => bindUnboundOutputs(s.out1, to, visited, target)
-					}
-					s.out2 match {
-						case w: WaitingToBeBound if w == target => s.out2 = to
-						case _ => bindUnboundOutputs(s.out2, to, visited, target)
-					}
-				}
-	
-				case _: Match =>
-				case _: WaitingToBeBound =>
-			}
+			case Plus(r) => regexToNFA(Concat(r, Repeat(r)), andThen)			
 		}
 	}
 }
@@ -128,6 +96,7 @@ object NFAEvaluator {
 		} else {
 			visitedStates.add(currentState)
 			currentState match {
+				case placeholder: Placeholder => evaluateState(placeholder.pointingTo, input, visitedStates)
 				case consume: Consume => if (Some(consume.c) == input || consume.c == '.') Set(consume.out) else Set()
 				case s: Split => evaluateState(s.out1, input, visitedStates) ++ evaluateState(s.out2, input, visitedStates)
 				case m: Match => if (input.isDefined) Set() else Set(Match())
