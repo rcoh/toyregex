@@ -1,8 +1,0 @@
-graph {
-	p [label="+"]
-	t [label="*"]
-	p -- 5
-	p -- t
-	t -- 6
-	t -- 4
-}
